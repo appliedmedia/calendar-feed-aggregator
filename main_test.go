@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -53,10 +54,13 @@ func TestPrintCalendarSummary(t *testing.T) {
 
 	// Create a channel to capture the output asynchronously
 	outC := make(chan string)
+	errCh := make(chan error, 1)
+
 	go func() {
 		var buf strings.Builder
 		if _, err := io.Copy(&buf, r); err != nil {
-			t.Fatalf("Error capturing output: %v", err)
+			errCh <- fmt.Errorf("error capturing output: %v", err)
+			return
 		}
 		outC <- buf.String()
 	}()
@@ -65,32 +69,47 @@ func TestPrintCalendarSummary(t *testing.T) {
 	printCalendarSummary(mockColombianCalendar)
 	w.Close()
 	os.Stdout = old
-	output := <-outC
-	if !strings.Contains(output, "Colombian New Year") {
-		t.Errorf("Expected summary to contain 'Colombian New Year'")
-	}
-	if !strings.Contains(output, "Colombian Independence Day") {
-		t.Errorf("Expected summary to contain 'Colombian Independence Day'")
+
+	select {
+	case output := <-outC:
+		if !strings.Contains(output, "Colombian New Year") {
+			t.Errorf("Expected summary to contain 'Colombian New Year'")
+		}
+		if !strings.Contains(output, "Colombian Independence Day") {
+			t.Errorf("Expected summary to contain 'Colombian Independence Day'")
+		}
+	case err := <-errCh:
+		t.Fatalf("Received error: %v", err)
 	}
 
 	// Reset the pipe for the next test
 	r, w, _ = os.Pipe()
-	var buf strings.Builder
-	if _, err := io.Copy(&buf, r); err != nil {
-		t.Fatalf("Error capturing output: %v", err)
-	}
-	outC <- buf.String()
+	os.Stdout = w
+
+	go func() {
+		var buf strings.Builder
+		if _, err := io.Copy(&buf, r); err != nil {
+			errCh <- fmt.Errorf("error capturing output: %v", err)
+			return
+		}
+		outC <- buf.String()
+	}()
 
 	// Test with mock Canadian calendar data
 	printCalendarSummary(mockCanadianCalendar)
 	w.Close()
 	os.Stdout = old
-	output = <-outC
-	if !strings.Contains(output, "Canadian New Year") {
-		t.Errorf("Expected summary to contain 'Canadian New Year'")
-	}
-	if !strings.Contains(output, "Canada Day") {
-		t.Errorf("Expected summary to contain 'Canada Day'")
+
+	select {
+	case output := <-outC:
+		if !strings.Contains(output, "Canadian New Year") {
+			t.Errorf("Expected summary to contain 'Canadian New Year'")
+		}
+		if !strings.Contains(output, "Canada Day") {
+			t.Errorf("Expected summary to contain 'Canada Day'")
+		}
+	case err := <-errCh:
+		t.Fatalf("Received error: %v", err)
 	}
 }
 
@@ -122,3 +141,5 @@ func TestCombineCalendars(t *testing.T) {
 		t.Errorf("Expected combined calendar to contain 'Canada Day'")
 	}
 }
+
+// End, main_test.go

@@ -4,11 +4,9 @@ package main
 import (
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	ics "github.com/arran4/golang-ical"
 )
@@ -117,8 +115,6 @@ func combineCalendars(cal1, cal2 *ics.Calendar) *ics.Calendar {
 
 // main is the entry point of the program.
 func main() {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 	fmt.Println("Calendar Feed Aggregator")
 
 	colombianFeed, err := fetchCalendar(ColombianHolidaysURL)
