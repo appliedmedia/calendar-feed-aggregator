@@ -67,7 +67,7 @@ func printCalendarSummary(calendarData string) {
 	printEventSummary(events, 0, "First")
 
 	if totalEvents > 2 {
-		middleIndex := rand.Intn(totalEvents-2) + 1
+		middleIndex := totalEvents / 2
 		printEventSummary(events, middleIndex, "Middle")
 	}
 
@@ -117,7 +117,7 @@ func combineCalendars(cal1, cal2 *ics.Calendar) *ics.Calendar {
 
 // main is the entry point of the program.
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	fmt.Println("Calendar Feed Aggregator")
 

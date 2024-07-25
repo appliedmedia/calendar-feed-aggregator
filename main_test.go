@@ -55,7 +55,9 @@ func TestPrintCalendarSummary(t *testing.T) {
 	outC := make(chan string)
 	go func() {
 		var buf strings.Builder
-		io.Copy(&buf, r)
+		if _, err := io.Copy(&buf, r); err != nil {
+			t.Fatalf("Error capturing output: %v", err)
+		}
 		outC <- buf.String()
 	}()
 
@@ -64,7 +66,6 @@ func TestPrintCalendarSummary(t *testing.T) {
 	w.Close()
 	os.Stdout = old
 	output := <-outC
-
 	if !strings.Contains(output, "Colombian New Year") {
 		t.Errorf("Expected summary to contain 'Colombian New Year'")
 	}
@@ -74,19 +75,17 @@ func TestPrintCalendarSummary(t *testing.T) {
 
 	// Reset the pipe for the next test
 	r, w, _ = os.Pipe()
-	os.Stdout = w
-	go func() {
-		var buf strings.Builder
-		io.Copy(&buf, r)
-		outC <- buf.String()
-	}()
+	var buf strings.Builder
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("Error capturing output: %v", err)
+	}
+	outC <- buf.String()
 
 	// Test with mock Canadian calendar data
 	printCalendarSummary(mockCanadianCalendar)
 	w.Close()
 	os.Stdout = old
 	output = <-outC
-
 	if !strings.Contains(output, "Canadian New Year") {
 		t.Errorf("Expected summary to contain 'Canadian New Year'")
 	}
