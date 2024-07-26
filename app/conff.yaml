@@ -1,7 +1,0 @@
-ics:
-  header: |
-    BEGIN:VCALENDAR
-    VERSION:2.0
-    PRODID:-//Your Organization//Your Product//EN
-  footer: |
-    END:VCALENDAR
