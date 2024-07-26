@@ -3,54 +3,67 @@
 package fetcher
 
 import (
+	"bufio"
 	"io"
-	"sync"
-
-	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
-const (
-	// ColombianHolidaysURL is the URL to fetch Colombian holidays in iCalendar format.
-	ColombianHolidaysURL = "https://www.officeholidays.com/ics/ics_country.php?tbl_country=Colombia"
-	// CanadianHolidaysURL is the URL to fetch Canadian holidays in iCalendar format.
-	CanadianHolidaysURL = "https://www.officeholidays.com/ics/ics_country.php?tbl_country=Canada"
-)
+// FetchICS handles the reading of ICS files and streams the individual events back.
+// TODO: If there's a VTIMEZONE in a file, may need to add TZID to the VEVENTS, such as:
+// BEGIN:VTIMEZONE
+// TZID:America/New_York
+// ...
+// END:VTIMEZONE
+// BEGIN:VEVENT
+// DTSTART;TZID=America/New_York:20231010T090000
+// DTEND;TZID=America/New_York:20231010T100000
+// SUMMARY:Event in New York
+// ...
+// END:VEVENT
+func FetchICS(url string, eventChan chan<- string) {
+	resp, err := http.Get(url)
+	if err != nil {
+		eventChan <- "Error fetching URL: " + url
+		return
+	}
+	defer resp.Body.Close()
 
-// aggregateICS handles the aggregation of ICS files and streams the combined events.
-func aggregateICS(c *gin.Context) {
-	icsURLs := []string{ColombianHolidaysURL, CanadianHolidaysURL}
-	eventChan := make(chan string)
-	var wg sync.WaitGroup
+	reader := bufio.NewReader(resp.Body)
+	var event string
+	inEvent := false
 
-	// Fetch calendars concurrently
-	for _, url := range icsURLs {
-		wg.Add(1)
-		go func(url string) {
-			defer wg.Done()
-			fetchICS(url, eventChan)
-		}(url)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			eventChan <- "Error reading response body: " + url
+			return
+		}
+		if err == io.EOF {
+			break
+		}
+
+		// Check for the beginning of an event
+		if line == "BEGIN:VEVENT\r\n" || line == "BEGIN:VEVENT\n" {
+			inEvent = true
+			event = line
+			continue
+		}
+
+		// Accumulate event data if within an event
+		if inEvent {
+			event += line
+			if line == "END:VEVENT\r\n" || line == "END:VEVENT\n" {
+				eventChan <- event
+				inEvent = false
+				event = ""
+			}
+		}
 	}
 
-	// Close the channel once all goroutines are done
-	go func() {
-		wg.Wait()
-		close(eventChan)
-	}()
-
-	// Stream events to the client
-	c.Stream(func(w io.Writer) bool {
-		if event, ok := <-eventChan; ok {
-			c.Writer.Write([]byte(event))
-			return true
-		}
-		return false
-	})
-}
-
-func main() {
-	r := gin.Default()
-	r.GET("/aggregate_ics", aggregateICS)
-	r.Run(":8080")
+	// Send any remaining event data
+	if event != "" {
+		eventChan <- event
+	}
 }
 
 // End, fetcher.go
