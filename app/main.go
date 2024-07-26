@@ -1,3 +1,4 @@
+// main.go
 // Package holidays provides functionality to fetch and summarize holiday calendars.
 package main
 
@@ -7,8 +8,12 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 
 	ics "github.com/arran4/golang-ical"
+	"github.com/gin-gonic/gin"
+
+	"two-feeds-to-one/fetcher"
 )
 
 const (
@@ -114,7 +119,7 @@ func combineCalendars(cal1, cal2 *ics.Calendar) *ics.Calendar {
 }
 
 // main is the entry point of the program.
-func main() {
+func mainVersion1() {
 	fmt.Println("Calendar Feed Aggregator")
 
 	colombianFeed, err := fetchCalendar(ColombianHolidaysURL)
@@ -153,3 +158,42 @@ func main() {
 	fmt.Println("Combined Holidays Feed Summary:")
 	printCalendarSummary(combinedCalData)
 }
+
+// aggregateICS handles the aggregation of ICS files and streams the combined events.
+func aggregateICS(c *gin.Context) {
+	icsURLs := []string{ColombianHolidaysURL, CanadianHolidaysURL}
+	eventChan := make(chan string)
+	var wg sync.WaitGroup
+
+	// Fetch calendars concurrently
+	for _, url := range icsURLs {
+		wg.Add(1)
+		go func(url string) {
+			defer wg.Done()
+			fetcher.FetchICS(url, eventChan)
+		}(url)
+	}
+
+	// Close the channel once all goroutines are done
+	go func() {
+		wg.Wait()
+		close(eventChan)
+	}()
+
+	// Stream events to the client
+	c.Stream(func(w io.Writer) bool {
+		if event, ok := <-eventChan; ok {
+			c.Writer.Write([]byte(event))
+			return true
+		}
+		return false
+	})
+}
+
+func main() {
+	r := gin.Default()
+	r.GET("/aggregate_ics", aggregateICS)
+	r.Run(":8080")
+}
+
+// End, main.go
