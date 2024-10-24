@@ -5,15 +5,18 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/appliedmedia/calendar-feed-aggregator/fetcher"
+
 	ics "github.com/arran4/golang-ical"
 	"github.com/gin-gonic/gin"
-
-	"two-feeds-to-one/fetcher"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -159,6 +162,33 @@ func mainVersion1() {
 	printCalendarSummary(combinedCalData)
 }
 
+type Config struct {
+	ICS struct {
+		Header string `yaml:"header"`
+		Footer string `yaml:"footer"`
+	} `yaml:"ics"`
+}
+
+var config Config
+
+func init() {
+	data, err := ioutil.ReadFile("conf.yaml")
+	if err != nil {
+		log.Fatalf("Error reading config file: %v", err)
+	}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		log.Fatalf("Error parsing config file: %v", err)
+	}
+}
+
+func writeICSHeader(c *gin.Context) {
+	c.Writer.Write([]byte(config.ICS.Header))
+}
+
+func writeICSFooter(c *gin.Context) {
+	c.Writer.Write([]byte(config.ICS.Footer))
+}
+
 // aggregateICS handles the aggregation of ICS files and streams the combined events.
 func aggregateICS(c *gin.Context) {
 	icsURLs := []string{ColombianHolidaysURL, CanadianHolidaysURL}
@@ -180,6 +210,9 @@ func aggregateICS(c *gin.Context) {
 		close(eventChan)
 	}()
 
+	// Write the ICS header
+	writeICSHeader(c)
+
 	// Stream events to the client
 	c.Stream(func(w io.Writer) bool {
 		if event, ok := <-eventChan; ok {
@@ -188,6 +221,9 @@ func aggregateICS(c *gin.Context) {
 		}
 		return false
 	})
+
+	// Write the ICS footer
+	writeICSFooter(c)
 }
 
 func main() {
